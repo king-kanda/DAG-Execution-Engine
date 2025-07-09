@@ -6,7 +6,18 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import hashlib
 import time
+import requests
+import os
 from typing import Dict, List, Any, Optional
+from groq import Groq
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️ python-dotenv not installed. Please install with: pip install python-dotenv")
+    print("⚠️ Or set environment variables manually")
 
 
 class MockRedis:
@@ -128,7 +139,7 @@ class StartNodeExecutor(BaseNodeExecutor):
         return "OK"
 
 class ActionExecutor(BaseNodeExecutor):
-    """Action executor - extracts data from context, calls API, stores output"""
+    """Action executor - extracts data from context, calls REAL APIs, stores output"""
     
     def execute(self):
         action_type = self.node["data"].get("action_type")
@@ -138,8 +149,17 @@ class ActionExecutor(BaseNodeExecutor):
         # Extract data from current context
         input_data = self._extract_input_data()
         
-        # Simulate API call based on action type
-        api_output = self._call_api(action_type, input_data)
+        # Call REAL API based on action type
+        try:
+            api_output = self._call_real_api(action_type, input_data)
+        except Exception as e:
+            print(f"❌ API call failed: {str(e)}")
+            # Return error but don't crash the workflow
+            api_output = {
+                "error": True,
+                "error_message": str(e),
+                "timestamp": time.time()
+            }
         
         # Store output in context
         self.context.add_action_output(
@@ -165,40 +185,193 @@ class ActionExecutor(BaseNodeExecutor):
             
         return input_data
     
-    def _call_api(self, action_type: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Simulate API call based on action type"""
-        # Simulate processing time
-        import time
-        time.sleep(0.5)
+    def _call_real_api(self, action_type: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Make real API calls based on action type"""
         
         if action_type == "check_eligibility":
-            id_number = input_data.get("id_number", "unknown")
-            return {
-                "eligibility_status": "eligible",
-                "id_verified": True,
-                "id_number": id_number,
-                "verification_timestamp": time.time()
-            }
+            return self._call_eligibility_api(input_data)
         elif action_type == "zoho_crm_lookup":
+            return self._call_zoho_api(input_data)
+        elif action_type == "hubspot_integration":
+            return self._call_hubspot_api(input_data)
+        else:
+            # Generic API call for unknown action types
+            return self._call_generic_api(action_type, input_data)
+    
+    def _call_eligibility_api(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Call real eligibility checking API"""
+        id_number = input_data.get("id_number", "")
+        
+        # Example: Real API call to eligibility service
+        api_url = "https://api.eligibility-service.com/check"
+        headers = {
+            "Authorization": f"Bearer {os.getenv('ELIGIBILITY_API_KEY', 'demo-key')}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "id_number": id_number,
+            "context": input_data
+        }
+        
+        try:
+            # Make the actual API call
+            response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                api_result = response.json()
+                return {
+                    "eligibility_status": api_result.get("status", "unknown"),
+                    "id_verified": api_result.get("verified", False),
+                    "id_number": id_number,
+                    "verification_timestamp": time.time(),
+                    "api_response": api_result
+                }
+            else:
+                # API returned error status
+                return {
+                    "error": True,
+                    "error_code": response.status_code,
+                    "error_message": f"API returned {response.status_code}",
+                    "timestamp": time.time()
+                }
+                
+        except requests.exceptions.RequestException as e:
+            # Network error or timeout
+            print(f"⚠️ Eligibility API unavailable, using fallback logic")
+            # Fallback logic when API is down
+            return {
+                "eligibility_status": "eligible" if id_number else "unknown",
+                "id_verified": bool(id_number),
+                "id_number": id_number,
+                "verification_timestamp": time.time(),
+                "fallback_used": True,
+                "error_message": str(e)
+            }
+    
+    def _call_zoho_api(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Call real Zoho CRM API"""
+        api_url = "https://www.zohoapis.com/crm/v2/Contacts"
+        headers = {
+            "Authorization": f"Zoho-oauthtoken {os.getenv('ZOHO_ACCESS_TOKEN', 'demo-token')}",
+            "Content-Type": "application/json"
+        }
+        
+        # Search for customer by ID or email
+        search_criteria = input_data.get("id_number", "")
+        params = {
+            "criteria": f"(Email:equals:{search_criteria}) or (Customer_ID:equals:{search_criteria})"
+        }
+        
+        try:
+            response = requests.get(api_url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                api_result = response.json()
+                contacts = api_result.get("data", [])
+                
+                if contacts:
+                    customer = contacts[0]  # Take first match
+                    return {
+                        "customer_found": True,
+                        "customer_data": {
+                            "name": f"{customer.get('First_Name', '')} {customer.get('Last_Name', '')}",
+                            "email": customer.get("Email", ""),
+                            "tier": customer.get("Customer_Tier", "standard"),
+                            "id": customer.get("id")
+                        },
+                        "lookup_timestamp": time.time()
+                    }
+                else:
+                    return {
+                        "customer_found": False,
+                        "lookup_timestamp": time.time()
+                    }
+            else:
+                return {
+                    "error": True,
+                    "error_code": response.status_code,
+                    "error_message": f"Zoho API returned {response.status_code}",
+                    "timestamp": time.time()
+                }
+                
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Zoho API unavailable, using fallback")
             return {
                 "customer_found": True,
-                "customer_data": {"name": "John Doe", "tier": "premium"},
-                "lookup_timestamp": time.time()
+                "customer_data": {"name": "Demo Customer", "tier": "standard"},
+                "lookup_timestamp": time.time(),
+                "fallback_used": True,
+                "error_message": str(e)
             }
-        elif action_type == "hubspot_integration":
+    
+    def _call_hubspot_api(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Call real HubSpot API"""
+        api_url = "https://api.hubapi.com/conversations/v3/conversations"
+        headers = {
+            "Authorization": f"Bearer {os.getenv('HUBSPOT_ACCESS_TOKEN', 'demo-token')}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create a conversation or send message
+        payload = {
+            "type": "CHAT",
+            "inbox": {"id": os.getenv('HUBSPOT_INBOX_ID', 'demo-inbox')},
+            "message": {
+                "type": "MESSAGE",
+                "text": f"Workflow executed with context: {json.dumps(input_data, indent=2)}"
+            }
+        }
+        
+        try:
+            response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                api_result = response.json()
+                return {
+                    "message_sent": True,
+                    "conversation_id": api_result.get("id"),
+                    "delivery_timestamp": time.time(),
+                    "hubspot_response": api_result
+                }
+            else:
+                return {
+                    "error": True,
+                    "error_code": response.status_code,
+                    "error_message": f"HubSpot API returned {response.status_code}",
+                    "timestamp": time.time()
+                }
+                
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ HubSpot API unavailable, using fallback")
             return {
                 "message_sent": True,
-                "message_id": "msg_12345",
-                "delivery_timestamp": time.time()
+                "message_id": f"fallback_{int(time.time())}",
+                "delivery_timestamp": time.time(),
+                "fallback_used": True,
+                "error_message": str(e)
             }
-        else:
-            return {
-                "action_completed": True,
-                "timestamp": time.time()
-            }
+    
+    def _call_generic_api(self, action_type: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generic API call handler for unknown action types"""
+        print(f"⚠️ Unknown action type: {action_type}, using generic handler")
+        
+        # You can implement custom logic here for other API integrations
+        return {
+            "action_completed": True,
+            "action_type": action_type,
+            "input_received": list(input_data.keys()),
+            "timestamp": time.time(),
+            "generic_handler": True
+        }
 
 class NaturalLanguageInstructionsExecutor(BaseNodeExecutor):
-    """Natural language instructions executor with requirement checking"""
+    """Natural language instructions executor with Groq LLM integration"""
+    
+    def __init__(self, node, context: ConversationalContext):
+        super().__init__(node, context)
+        # Initialize Groq client
+        self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY', 'your-groq-api-key-here'))
     
     def execute(self):
         instructions = self.node["data"].get("description", "")
@@ -218,8 +391,13 @@ class NaturalLanguageInstructionsExecutor(BaseNodeExecutor):
                 self.context.add_assistant_message(f"I need the following information: {', '.join(missing_fields)}. {instructions}")
                 return "WAIT"
         
-        # Check 2: Execute natural language instructions
-        nl_output = self._execute_instructions(instructions)
+        # Check 2: Execute natural language instructions with Groq
+        try:
+            nl_output = self._execute_groq_instructions(instructions)
+        except Exception as e:
+            print(f"❌ Groq API call failed: {str(e)}")
+            # Fallback to basic processing
+            nl_output = self._execute_fallback_instructions(instructions)
         
         # Store output in context
         self.context.add_action_output(
@@ -231,18 +409,129 @@ class NaturalLanguageInstructionsExecutor(BaseNodeExecutor):
         print(f"✅ NL Instructions completed: {nl_output}")
         return "OK"
     
-    def _execute_instructions(self, instructions: str) -> Dict[str, Any]:
-        """Process natural language instructions"""
-        # Simulate NL processing
-        import time
-        time.sleep(0.3)
+    def _execute_groq_instructions(self, instructions: str) -> Dict[str, Any]:
+        """Process natural language instructions using Groq LLM"""
+        
+        # Get user's latest message from conversation history
+        user_messages = [msg for msg in self.context.conversation_history if msg.get("role") == "user"]
+        latest_user_message = user_messages[-1]["content"] if user_messages else "No user input"
+        
+        # Build context for the LLM
+        context_summary = {
+            "chat_context": self.context.chat_context,
+            "previous_actions": [
+                {
+                    "node": action["node_id"], 
+                    "type": action["action_type"], 
+                    "result": action["output"]
+                } 
+                for action in self.context.action_outputs
+            ],
+            "user_message": latest_user_message
+        }
+        
+        # Create prompt for Groq
+        system_prompt = f"""You are an AI assistant processing workflow instructions. 
+        
+        Current Instructions: {instructions}
+        
+        Context: {json.dumps(context_summary, indent=2)}
+        
+        Analyze the user's message and context, then provide a structured response that:
+        1. Summarizes what you understand
+        2. Extracts any relevant information
+        3. Determines next actions if needed
+        4. Provides a conversational response
+        
+        Return your response as a JSON object with keys: understanding, extracted_info, next_actions, response"""
+        
+        try:
+            # Call Groq API
+            chat_completion = self.groq_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user", 
+                        "content": latest_user_message
+                    }
+                ],
+                model="llama3-8b-8192",  # You can change this to other Groq models
+                temperature=0.3,
+                max_tokens=1024
+            )
+            
+            # Parse LLM response
+            llm_response = chat_completion.choices[0].message.content
+            
+            try:
+                # Try to parse as JSON
+                parsed_response = json.loads(llm_response)
+            except json.JSONDecodeError:
+                # If not valid JSON, wrap the response
+                parsed_response = {
+                    "understanding": "Processed user input",
+                    "extracted_info": {},
+                    "next_actions": [],
+                    "response": llm_response
+                }
+            
+            # Add assistant message to conversation
+            assistant_response = parsed_response.get("response", "I've processed your message.")
+            self.context.add_assistant_message(assistant_response)
+            
+            return {
+                "instructions_processed": True,
+                "instructions": instructions,
+                "user_message_analyzed": latest_user_message,
+                "llm_response": parsed_response,
+                "groq_model": "llama3-8b-8192",
+                "context_items_count": len(self.context.chat_context),
+                "timestamp": time.time()
+            }
+            
+        except Exception as e:
+            raise Exception(f"Groq API error: {str(e)}")
+    
+    def _execute_fallback_instructions(self, instructions: str) -> Dict[str, Any]:
+        """Fallback processing when Groq API is unavailable"""
+        print("⚠️ Using fallback NL processing")
+        
+        # Basic analysis without LLM
+        user_messages = [msg for msg in self.context.conversation_history if msg.get("role") == "user"]
+        latest_user_message = user_messages[-1]["content"] if user_messages else "No user input"
+        
+        # Simple keyword extraction
+        extracted_keywords = self._extract_keywords(latest_user_message)
+        
+        # Generate basic response
+        fallback_response = f"I understand you mentioned: {', '.join(extracted_keywords)}. I'm processing this information."
+        self.context.add_assistant_message(fallback_response)
         
         return {
             "instructions_processed": True,
             "instructions": instructions,
-            "context_summary": f"Processed instructions with {len(self.context.chat_context)} context items",
+            "user_message_analyzed": latest_user_message,
+            "extracted_keywords": extracted_keywords,
+            "fallback_used": True,
+            "response": fallback_response,
+            "context_items_count": len(self.context.chat_context),
             "timestamp": time.time()
         }
+    
+    def _extract_keywords(self, text: str) -> List[str]:
+        """Simple keyword extraction for fallback"""
+        # Basic keyword extraction (you could use NLTK or spaCy for better results)
+        import re
+        
+        # Remove common words and extract meaningful terms
+        common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'my', 'i', 'me'}
+        words = re.findall(r'\b\w+\b', text.lower())
+        keywords = [word for word in words if word not in common_words and len(word) > 2]
+        
+        return keywords[:5]  # Return top 5 keywords
 
 class EndNodeExecutor(BaseNodeExecutor):
     def execute(self):
@@ -498,22 +787,43 @@ if __name__ == "__main__":
     redis_client = MockRedis()
     conversation_id = "conv-001"
 
+    print("\n=== Real API Integration Test ===")
+    print("🔑 API Keys Status:")
+    print(f"   GROQ_API_KEY: {'✅ Set' if os.getenv('GROQ_API_KEY') and os.getenv('GROQ_API_KEY') != 'your-groq-api-key-here' else '❌ Not configured'}")
+    print(f"   ELIGIBILITY_API_KEY: {'✅ Set' if os.getenv('ELIGIBILITY_API_KEY') else '❌ Not configured'}")
+    print(f"   ZOHO_ACCESS_TOKEN: {'✅ Set' if os.getenv('ZOHO_ACCESS_TOKEN') else '❌ Not configured'}")
+    print(f"   HUBSPOT_ACCESS_TOKEN: {'✅ Set' if os.getenv('HUBSPOT_ACCESS_TOKEN') else '❌ Not configured'}")
+    
     print("\n=== First Run (Missing ID Number) ===")
     initial_context = {}  # Simulating no input yet
     executor = RedisSOPExecutor(sample_sop, conversation_id, redis_client, initial_context)
     result1 = executor.run()
-    print(f"Result 1: {result1}")
+    print(f"Result 1: {json.dumps(result1, indent=2)}")
 
     if result1["status"] == "WAITING":
-        print("\n=== Resuming with User Input ===")
+        print("\n=== Resuming with User Input (Real LLM Analysis) ===")
         user_input = {
             "id_number": "12345678",
-            "message": "My ID number is 12345678"
+            "message": "Hi, my ID number is 12345678 and I need help with my account eligibility. Can you check if I'm eligible for the premium service?"
         }
         result2 = executor.resume_with_user_input(user_input)
-        print(f"Result 2: {result2}")
+        print(f"Result 2: {json.dumps(result2, indent=2)}")
     
-    print(f"\nFinal Results:")
-    print(f"Run 1: {result1}")
+    print(f"\n📊 Final Execution Summary:")
+    print(f"   Run 1: {result1['status']}")
     if 'result2' in locals():
-        print(f"Run 2: {result2}")
+        print(f"   Run 2: {result2['status']}")
+        
+        # Show the LLM analysis if available
+        if result2.get("status") == "COMPLETED":
+            final_data = result2.get("data", {})
+            action_outputs = final_data.get("action_outputs", [])
+            
+            for action in action_outputs:
+                if action.get("action_type") == "natural_language_processing":
+                    llm_output = action.get("output", {})
+                    if "llm_response" in llm_output:
+                        print(f"\n🧠 Groq LLM Analysis:")
+                        print(f"   Understanding: {llm_output['llm_response'].get('understanding', 'N/A')}")
+                        print(f"   Response: {llm_output['llm_response'].get('response', 'N/A')}")
+                    break
