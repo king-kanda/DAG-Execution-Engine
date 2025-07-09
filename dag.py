@@ -1,4 +1,4 @@
-{
+dag_flow ={
   "title": "Nexus Wave Demo WorkFlow",
   "id": "loan_sop_v1",
   "nodes": [
@@ -14,14 +14,14 @@
         "description": "Entry point of the workflow or user interaction.",
         "iconName": "Zap",
         "color": "#FBBF24",
-        "isCustom": false
+        "isCustom": False
       },
       "measured": {
         "width": 322,
         "height": 90
       },
-      "selected": false,
-      "dragging": false
+      "selected": False,
+      "dragging": False
     },
     {
       "id": "732f8e26-dbf6-4266-af1b-3edb838e19da",
@@ -35,7 +35,7 @@
         "description": "Connects external services like CRMs, databases, or third-party APIs.",
         "iconName": "Bolt",
         "color": "#34D399",
-        "isCustom": false,
+        "isCustom": False,
         "connectedAPI": {
           "id": "zoho",
           "name": "Zoho CRM",
@@ -50,8 +50,8 @@
         "width": 322,
         "height": 106
       },
-      "selected": false,
-      "dragging": false
+      "selected": False,
+      "dragging": False
     },
     {
       "id": "d372edda-8e42-45ac-9c03-d5b01f9dedb8",
@@ -65,7 +65,7 @@
         "description": "Configure external APIs, set AI behavior, and environment settings.",
         "iconName": "Globe",
         "color": "#60A5FA",
-        "isCustom": false,
+        "isCustom": False,
         "connectedAPI": {
           "id": "ad7e7b82-19c4-4ee5-be2c-404ed5ed208d",
           "name": "Hubspot Custome Messeger",
@@ -73,12 +73,12 @@
           "category": "API",
           "icon": {
             "type": {},
-            "key": null,
-            "ref": null,
+            "key": None,
+            "ref": None,
             "props": {
               "size": 20
             },
-            "_owner": null,
+            "_owner": None,
             "_store": {}
           },
           "authType": "Authenticated",
@@ -98,8 +98,8 @@
         "width": 322,
         "height": 106
       },
-      "selected": false,
-      "dragging": false
+      "selected": False,
+      "dragging": False
     },
     {
       "id": "dc0471ff-a8b3-4b33-9d09-fac14dc7a231",
@@ -114,15 +114,15 @@
         "required_fields": ["id_number"],
         "iconName": "Brain",
         "color": "#A78BFA",
-        "isCustom": false,
+        "isCustom": False,
         "customInstructions": "\n\\]'[;plokjhgfdsgcgxgxgxg"
       },
       "measured": {
         "width": 322,
         "height": 106
       },
-      "selected": true,
-      "dragging": false
+      "selected": True,
+      "dragging": False
     },
     {
       "id": "c8ffc22a-004d-43c2-9e9c-bba903b7505d",
@@ -136,14 +136,14 @@
         "description": "Final step in the workflow or response cycle.",
         "iconName": "Component",
         "color": "#6B7280",
-        "isCustom": false
+        "isCustom": False
       },
       "measured": {
         "width": 322,
         "height": 90
       },
-      "selected": false,
-      "dragging": false
+      "selected": False,
+      "dragging": False
     }
   ],
   "edges": [
@@ -151,11 +151,6 @@
       "source": "1",
       "target": "732f8e26-dbf6-4266-af1b-3edb838e19da",
       "id": "xy-edge__1-732f8e26-dbf6-4266-af1b-3edb838e19da"
-    },
-    {
-      "source": "1",
-      "target": "0da4b9c4-15b1-46e4-8e24-46875799f047",
-      "id": "xy-edge__1-0da4b9c4-15b1-46e4-8e24-46875799f047"
     },
     {
       "source": "1",
