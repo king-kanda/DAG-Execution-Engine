@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Message } from './WorkflowEngine'
+import type { Message } from './WorkflowEngine.js'
 import './ChatInterface.css'
 
 interface ChatInterfaceProps {

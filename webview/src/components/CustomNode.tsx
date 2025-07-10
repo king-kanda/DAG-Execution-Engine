@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Handle, Position, NodeProps } from '@xyflow/react'
+import { Handle, Position, type NodeProps } from '@xyflow/react'
 import './CustomNode.css'
 
 interface CustomNodeData {
@@ -10,6 +10,10 @@ interface CustomNodeData {
   status: 'pending' | 'running' | 'completed' | 'error'
   output?: any
   error?: string
+}
+
+type CustomNodeProps = NodeProps & {
+  data: CustomNodeData
 }
 
 const getIconEmoji = (iconName: string) => {
@@ -41,7 +45,7 @@ const getStatusIcon = (status: string) => {
   }
 }
 
-const CustomNode = memo(({ data, id }: NodeProps<CustomNodeData>) => {
+const CustomNode = memo(({ data }: CustomNodeProps) => {
   const statusColor = getStatusColor(data.status)
   const statusIcon = getStatusIcon(data.status)
   const icon = getIconEmoji(data.iconName)

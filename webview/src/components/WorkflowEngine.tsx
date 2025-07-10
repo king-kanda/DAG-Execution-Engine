@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react'
-import { ReactFlow, MiniMap, Controls, Background } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import DAGVisualization from './DAGVisualization'
-import ChatInterface from './ChatInterface'
-import { weatherDAG } from '../data/weatherDAG'
+import DAGVisualization from './DAGVisualization.js'
+import ChatInterface from './ChatInterface.js'
+import { weatherDAG } from '../data/weatherDAG.js'
+import { api } from '../services/api.js'
 import './WorkflowEngine.css'
 
 export interface Message {
@@ -45,63 +44,64 @@ const WorkflowEngine = () => {
     setMessages(prev => [...prev, userMessage])
     setIsExecuting(true)
 
-    // Simulate workflow execution
-    const systemMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'system',
-      content: 'Starting workflow execution...',
-      timestamp: new Date()
-    }
-    
-    setMessages(prev => [...prev, systemMessage])
-
-    // TODO: Replace with actual API call to your Python backend
-    // For now, we'll simulate the workflow execution
-    await simulateWorkflowExecution(content)
-    
-    setIsExecuting(false)
-  }, [])
-
-  const simulateWorkflowExecution = async (userInput: string) => {
-    const nodes = weatherDAG.nodes.map(n => n.id)
-    
-    // Simulate node execution with delays
-    for (const nodeId of nodes) {
-      setNodeStatuses(prev => ({
-        ...prev,
-        [nodeId]: { status: 'running' }
-      }))
+    try {
+      // Execute workflow via API
+      await api.executeWorkflow(content)
       
-      const logMessage: Message = {
+      // Start polling for status updates
+      pollForUpdates()
+    } catch (error) {
+      const errorMessage: Message = {
         id: Date.now().toString(),
         type: 'system',
-        content: `Executing node: ${nodeId}`,
+        content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         timestamp: new Date()
       }
-      setMessages(prev => [...prev, logMessage])
+      setMessages(prev => [...prev, errorMessage])
+      setIsExecuting(false)
+    }
+  }, [])
+
+  const pollForUpdates = useCallback(async () => {
+    try {
+      const status = await api.getStatus()
       
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      setNodeStatuses(prev => ({
-        ...prev,
-        [nodeId]: { 
-          status: 'completed',
-          output: `Output from ${nodeId}`
-        }
+      // Convert API timestamps to Date objects and update messages
+      const convertedMessages = status.messages.map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
       }))
+      
+      setMessages(convertedMessages)
+      setNodeStatuses(status.node_statuses)
+      setIsExecuting(status.is_running)
+      
+      // Continue polling if workflow is running
+      if (status.is_running) {
+        setTimeout(pollForUpdates, 1000)
+      }
+    } catch (error) {
+      console.error('Failed to poll status:', error)
+      setIsExecuting(false)
     }
-    
-    // Final response
-    const finalMessage: Message = {
-      id: Date.now().toString(),
-      type: 'assistant',
-      content: `Based on your query "${userInput}", here's what I found:\n\n🌤️ The weather looks great for outdoor activities!\n🚶‍♂️ I recommend taking a walk or having a picnic.\n💭 "The best time to plant a tree was 20 years ago. The second best time is now." - Chinese Proverb`,
-      timestamp: new Date()
+  }, [])
+
+  const handleReset = useCallback(async () => {
+    try {
+      await api.resetWorkflow()
+      setNodeStatuses({})
+      setMessages([
+        {
+          id: '1',
+          type: 'system',
+          content: 'Welcome to the Weather & Activity Advisor! Ask me about the weather in any location.',
+          timestamp: new Date()
+        }
+      ])
+    } catch (error) {
+      console.error('Failed to reset workflow:', error)
     }
-    
-    setMessages(prev => [...prev, finalMessage])
-  }
+  }, [])
 
   return (
     <div className="workflow-engine">
@@ -112,7 +112,7 @@ const WorkflowEngine = () => {
             <div className="dag-controls">
               <button 
                 className="btn btn-primary"
-                onClick={() => setNodeStatuses({})}
+                onClick={handleReset}
                 disabled={isExecuting}
               >
                 Reset

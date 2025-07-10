@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import {
   ReactFlow,
-  Node,
-  Edge,
+  type Node,
+  type Edge,
   Controls,
   Background,
   MiniMap,
@@ -10,8 +10,9 @@ import {
   useEdgesState,
   ConnectionMode
 } from '@xyflow/react'
-import CustomNode from './CustomNode'
-import { NodeStatus } from './WorkflowEngine'
+import '@xyflow/react/dist/style.css'
+import CustomNode from './CustomNode.js'
+import type { NodeStatus } from './WorkflowEngine'
 import './DAGVisualization.css'
 
 interface DAGVisualizationProps {
@@ -58,7 +59,7 @@ const DAGVisualization = ({ dag, nodeStatuses }: DAGVisualizationProps) => {
   }, [dag.edges])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
 
   // Update nodes when statuses change
   useMemo(() => {
@@ -88,29 +89,6 @@ const DAGVisualization = ({ dag, nodeStatuses }: DAGVisualizationProps) => {
         attributionPosition="bottom-left"
       >
         <Background color="#374151" gap={20} />
-        <Controls 
-          style={{
-            button: {
-              backgroundColor: '#374151',
-              color: '#f9fafb',
-              border: '1px solid #6b7280'
-            }
-          }}
-        />
-        <MiniMap 
-          style={{
-            backgroundColor: '#1f2937',
-          }}
-          nodeColor={(node) => {
-            const status = node.data?.status || 'pending'
-            switch (status) {
-              case 'running': return '#f59e0b'
-              case 'completed': return '#10b981'
-              case 'error': return '#ef4444'
-              default: return '#6b7280'
-            }
-          }}
-        />
       </ReactFlow>
     </div>
   )
