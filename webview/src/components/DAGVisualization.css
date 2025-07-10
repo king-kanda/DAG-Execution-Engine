@@ -1,0 +1,50 @@
+.dag-visualization {
+  flex: 1;
+  position: relative;
+  background: #0f172a;
+}
+
+.react-flow {
+  background: #0f172a;
+}
+
+.react-flow__node {
+  font-family: inherit;
+}
+
+.react-flow__edge-path {
+  stroke: #6b7280;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #3b82f6;
+}
+
+.react-flow__controls {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 8px;
+}
+
+.react-flow__controls-button {
+  background: #374151 !important;
+  color: #f9fafb !important;
+  border: none !important;
+  border-bottom: 1px solid #4b5563 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #4b5563 !important;
+}
+
+.react-flow__minimap {
+  background: #1f2937 !important;
+  border: 1px solid #374151;
+  border-radius: 8px;
+}
+
+.react-flow__attribution {
+  color: #6b7280;
+  font-size: 10px;
+}
