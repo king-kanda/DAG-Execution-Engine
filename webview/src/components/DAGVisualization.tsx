@@ -3,9 +3,7 @@ import {
   ReactFlow,
   type Node,
   type Edge,
-  Controls,
   Background,
-  MiniMap,
   useNodesState,
   useEdgesState,
   ConnectionMode

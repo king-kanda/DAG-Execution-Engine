@@ -157,6 +157,9 @@ def execute_workflow_api(request: ExecuteRequest):
                 redis_client=redis_client,
                 initial_context=initial_context)
 
+            # Add user message to conversation history BEFORE starting execution
+            executor.context.add_user_message(user_input)
+
             # Store executor for potential stop operations
             active_executors[conversation_id] = executor
 
@@ -165,13 +168,61 @@ def execute_workflow_api(request: ExecuteRequest):
 
             # Process final result
             if result.get("status") == "COMPLETED":
-                # Get the final assistant response from context
+                # Extract the actual response from the workflow result
                 final_response = result.get("data", {})
-                if isinstance(final_response,
-                              dict) and "assistant_response" in final_response:
-                    content = final_response["assistant_response"]
-                else:
-                    content = "Workflow completed successfully!"
+                content = "Workflow completed successfully!"
+
+                # Try to get the activity advisor response
+                if isinstance(final_response, dict):
+                    action_outputs = final_response.get("action_outputs", [])
+                    for output in action_outputs:
+                        if output.get("node_id") == "activity-advisor":
+                            advisor_output = output.get("output", {})
+                            if isinstance(advisor_output, dict):
+                                llm_response = advisor_output.get(
+                                    "llm_response", {})
+                                if isinstance(llm_response, dict):
+                                    # Get the clean response from the LLM
+                                    response_text = llm_response.get(
+                                        "response", "")
+                                    if response_text:
+                                        content = response_text
+                                    break
+
+                # If no activity advisor response found, try to get weather info
+                if content == "Workflow completed successfully!":
+                    weather_info = ""
+                    quote_info = ""
+                    location_info = ""
+
+                    # Get location from chat context
+                    chat_context = final_response.get("chat_context", {})
+                    location = chat_context.get("location", "")
+                    if location:
+                        location_info = f"📍 Location: {location}\n"
+
+                    for output in action_outputs:
+                        if output.get("node_id") == "weather-api":
+                            weather_output = output.get("output", {})
+                            if isinstance(weather_output,
+                                          dict) and weather_output.get(
+                                              "weather_found"):
+                                location = weather_output.get("location", "")
+                                temp = weather_output.get("temperature", "")
+                                desc = weather_output.get("description", "")
+                                weather_info = f"🌤️ Weather in {location}: {temp}°C, {desc}\n"
+
+                        elif output.get("node_id") == "quote-api":
+                            quote_output = output.get("output", {})
+                            if isinstance(
+                                    quote_output,
+                                    dict) and quote_output.get("quote_found"):
+                                quote = quote_output.get("quote", "")
+                                author = quote_output.get("author", "")
+                                quote_info = f'💭 "{quote}" - {author}\n'
+
+                    if location_info or weather_info or quote_info:
+                        content = f"{location_info}{weather_info}{quote_info}I've gathered information about your query!"
 
                 workflow_status['messages'].append({
                     'id':
@@ -234,29 +285,6 @@ def execute_workflow_api(request: ExecuteRequest):
     thread.start()
 
     return {'message': 'Workflow execution started'}
-
-
-@app.post('/api/stop')
-def stop_workflow():
-    """Stop workflow execution"""
-    workflow_status['is_running'] = False
-    workflow_status['current_node'] = None
-
-    workflow_status['messages'].append({
-        'id': str(int(time.time() * 1000)),
-        'type': 'system',
-        'content': 'Workflow execution stopped by user',
-        'timestamp': int(time.time() * 1000)
-    })
-
-    return {'message': 'Workflow stopped'}
-
-
-@app.post('/api/reset')
-def reset_workflow():
-    """Reset workflow state"""
-    reset_workflow_status()
-    return {'message': 'Workflow reset'}
 
 
 if __name__ == '__main__':

@@ -42,24 +42,31 @@
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  margin-bottom: 8px;
 }
 
 .message-user {
   background: #1e40af;
   align-self: flex-end;
   max-width: 80%;
+  margin-left: auto;
+  margin-right: 0;
 }
 
 .message-assistant {
   background: #059669;
   align-self: flex-start;
   max-width: 85%;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .message-system {
   background: #7c2d12;
   align-self: center;
   max-width: 90%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .message-header {
